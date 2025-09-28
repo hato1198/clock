@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>世界時計 - World Clock</title>
+    <style>
+        /* --- 全体スタイル --- */
+        @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400&family=Oxanium:wght@300&display=swap');
+
+        html {
+            box-sizing: border-box;
+        }
+        *, *::before, *::after {
+            box-sizing: inherit;
+        }
+        
+        body {
+            font-family: 'Zen Kaku Gothic New', sans-serif;
+            background-color: #121826;
+            color: #F0F4F8;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 3em;
+            font-weight: 300;
+            color: #A6C8FF;
+            text-shadow: 0 0 10px rgba(166, 200, 255, 0.5);
+            margin: 40px 0;
+        }
+
+        /* --- 時計コンテナのレイアウト --- */
+        #world-clocks {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 30px;
+            width: 100%;
+            max-width: 1800px;
+            margin-bottom: 80px;
+        }
+
+        .clock-container {
+            background-color: #1A2233;
+            border-radius: 20px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            border: 1px solid #2A3852;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            width: 280px;
+        }
+
+        /* --- 都市名 --- */
+        .city-name {
+            font-size: 1.5em;
+            font-weight: 400;
+            color: #E6EFFF;
+            margin-bottom: 20px;
+        }
+        
+        /* --- アナログ時計 --- */
+        .analog-clock {
+            display: block;
+            margin: 0 auto 20px auto;
+            border-radius: 50%;
+        }
+        
+        /* --- デジタル時計 --- */
+        .digital-clock {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 2em;
+            font-weight: 300;
+            color: #A6C8FF;
+            background-color: #121826;
+            padding: 5px 10px;
+            border-radius: 8px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px rgba(166, 200, 255, 0.7);
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>世界時計</h1>
+
+    <div id="world-clocks">
+        <div class="clock-container">
+            <h2 class="city-name">日本</h2>
+            <canvas id="analog-jp" class="analog-clock" width="200" height="200"></canvas>
+            <div id="digital-jp" class="digital-clock"></div>
+        </div>
+        <div class="clock-container">
+            <h2 class="city-name">ロンドン</h2>
+            <canvas id="analog-lon" class="analog-clock" width="200" height="200"></canvas>
+            <div id="digital-lon" class="digital-clock"></div>
+        </div>
+        <div class="clock-container">
+            <h2 class="city-name">ニューヨーク</h2>
+            <canvas id="analog-ny" class="analog-clock" width="200" height="200"></canvas>
+            <div id="digital-ny" class="digital-clock"></div>
+        </div>
+        <div class="clock-container">
+            <h2 class="city-name">ロサンゼルス</h2>
+            <canvas id="analog-la" class="analog-clock" width="200" height="200"></canvas>
+            <div id="digital-la" class="digital-clock"></div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const cities = [
+        { id: 'jp', timeZone: 'Asia/Tokyo' },
+        { id: 'lon', timeZone: 'Europe/London' },
+        { id: 'ny', timeZone: 'America/New_York' },
+        { id: 'la', timeZone: 'America/Los_Angeles' }
+    ];
+
+    // 昼夜のテーマカラー定義
+    const themes = {
+        light: {
+            faceColor: '#F0F4F8',
+            borderColor: '#A6C8FF',
+            numberColor: '#1A2233',
+            largeHandColor: '#333333',
+            secondHandColor: '#d14040'
+        },
+        dark: {
+            faceColor: '#1A2233',
+            borderColor: '#2A3852',
+            numberColor: '#A6C8FF',
+            largeHandColor: '#E6EFFF',
+            secondHandColor: '#ff7575'
+        }
+    };
+    
+    /**
+     * 指定されたタイムゾーンの現在時刻を取得する
+     * @param {string} timeZone - IANAタイムゾーン名
+     * @returns {object} { hours, minutes, seconds }
+     */
+    function getTimeForZone(timeZone) {
+        const date = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            hour12: false,
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            timeZone: timeZone
+        });
+        const parts = formatter.formatToParts(date);
+        const time = {};
+        parts.forEach(({ type, value }) => {
+            time[type] = parseInt(value);
+        });
+        return { hours: time.hour, minutes: time.minute, seconds: time.second };
+    }
+
+    /**
+     * アナログ時計を描画する
+     * @param {CanvasRenderingContext2D} ctx - Canvasの2Dコンテキスト
+     * @param {number} radius - 時計の半径
+     * @param {object} time - { hours, minutes, seconds }
+     * @param {object} theme - 使用するカラーテーマ
+     */
+    function drawAnalogClock(ctx, radius, time, theme) {
+        ctx.clearRect(0, 0, radius * 2, radius * 2);
+        
+        // 時計盤
+        ctx.beginPath();
+        ctx.arc(radius, radius, radius - 5, 0, 2 * Math.PI);
+        ctx.fillStyle = theme.faceColor;
+        ctx.fill();
+        ctx.strokeStyle = theme.borderColor;
+        ctx.lineWidth = 5;
+        ctx.stroke();
+
+        // 数字
+        ctx.font = radius * 0.15 + "px 'Zen Kaku Gothic New'";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "center";
+        ctx.fillStyle = theme.numberColor;
+        for (let num = 1; num <= 12; num++) {
+            const angle = num * Math.PI / 6;
+            ctx.rotate(angle);
+            ctx.translate(0, -radius * 0.85);
+            ctx.rotate(-angle);
+            ctx.fillText(num.toString(), radius, radius);
+            ctx.rotate(angle);
+            ctx.translate(0, radius * 0.85);
+            ctx.rotate(-angle);
+        }
+
+        // 針の描画
+        const { hours, minutes, seconds } = time;
+        const hour = hours % 12;
+        
+        // 時針
+        const hourAngle = (hour * Math.PI / 6) + (minutes * Math.PI / (6 * 60)) + (seconds * Math.PI / (360 * 60));
+        drawHand(ctx, hourAngle, radius * 0.5, radius * 0.07, theme.largeHandColor);
+        
+        // 分針
+        const minuteAngle = (minutes * Math.PI / 30) + (seconds * Math.PI / (30 * 60));
+        drawHand(ctx, minuteAngle, radius * 0.75, radius * 0.05, theme.largeHandColor);
+        
+        // 秒針
+        const secondAngle = (seconds * Math.PI / 30);
+        drawHand(ctx, secondAngle, radius * 0.9, radius * 0.02, theme.secondHandColor);
+
+        // 中心点
+        ctx.beginPath();
+        ctx.arc(radius, radius, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = theme.secondHandColor;
+        ctx.fill();
+    }
+    
+    /**
+     * 時計の針を描画するヘルパー関数
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} angle - 針の角度 (ラジアン)
+     * @param {number} length - 針の長さ
+     * @param {number} width - 針の太さ
+     * @param {string} color - 針の色
+     */
+    function drawHand(ctx, angle, length, width, color) {
+        const radius = ctx.canvas.width / 2;
+        ctx.save(); // 現在の変換状態を保存
+        ctx.translate(radius, radius);
+        ctx.rotate(-Math.PI / 2); // 12時を基準にするために90度回転
+        
+        ctx.beginPath();
+        ctx.lineWidth = width;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = color;
+        ctx.moveTo(0, 0);
+        ctx.rotate(angle);
+        ctx.lineTo(length, 0);
+        ctx.stroke();
+
+        ctx.restore(); // 変換状態を元に戻す
+    }
+
+
+    function updateClocks() {
+        cities.forEach(city => {
+            const digitalEl = document.getElementById(`digital-${city.id}`);
+            const canvas = document.getElementById(`analog-${city.id}`);
+            const ctx = canvas.getContext('2d');
+            const radius = canvas.height / 2;
+
+            const currentTime = getTimeForZone(city.timeZone);
+            
+            // デジタル時計の更新
+            const h = String(currentTime.hours).padStart(2, '0');
+            const m = String(currentTime.minutes).padStart(2, '0');
+            const s = String(currentTime.seconds).padStart(2, '0');
+            digitalEl.textContent = `${h}:${m}:${s}`;
+            
+            // テーマの決定 (6:00から17:59までを昼とする)
+            const currentTheme = (currentTime.hours >= 6 && currentTime.hours < 18) ? themes.light : themes.dark;
+            
+            // アナログ時計の描画
+            drawAnalogClock(ctx, radius, currentTime, currentTheme);
+        });
+
+        requestAnimationFrame(updateClocks);
+    }
+
+    updateClocks(); // 初回実行
+});
+</script>
+
+</body>
+</html>
